@@ -10,6 +10,7 @@ from python_files import Query as qry, RS_prep as rsp, General as grl, Stabilize
 import numpy as np 
 import math
 import matplotlib.pyplot as plt
+import time
 
 # Qiskit functions
 from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit, transpile
@@ -520,7 +521,7 @@ def simulate_circuit(qc, shots=10, method="statevector", print_mem=False):
     """ """
     t0 = time.time()
     # simulate
-    sim = AerSimulator(method= "statevector")
+    sim = AerSimulator(method=method)
     tqc = transpile(qc, backend=sim, optimization_level=0)
     res = sim.run(tqc, shots=shots, memory=True).result()
     t1 = time.time()
