@@ -161,12 +161,13 @@ def repackage_into_registers(
     pos_in_new = {orig: new for new, orig in zip(new_linear, flat)}
     targets = [pos_in_new[q] for q in old_order]
     qc_new.compose(qc, qubits=targets, clbits=qc_new.clbits, inplace=True)
+
     return qc_new
     
 
 def make_BPs(
     n: int
-) -> Gate:
+) -> QuantumCircuit:
     """
     Return a Gate that creates n Bell pairs on 2n wires: pairs (i, i+n) via H on all and CZ between halves.
 
@@ -184,7 +185,7 @@ def make_BPs(
     sub.h(sub.qubits)
     sub.cz(sub.qubits[:n], sub.qubits[n:])
 
-    return sub#.to_gate(label=sub.name)
+    return sub
 
 
 def apply_make_BPs(
@@ -215,11 +216,17 @@ def apply_make_BPs(
     qc.compose(sub, qubits=targets, inplace=True)
 
 
-def prepare_BMs(n: int) -> Gate:
-    """Gate: pairwise CZ between halves then H on all (2n wires)."""
+def prepare_BMs(
+        n: int
+) -> QuantumCircuit:
+    """
+    Gate: pairwise CZ between halves then H on all (2n wires).
+    """
+
     sub = QuantumCircuit(2*n, name=f"Prepare {n} BMs")
     sub.cz(sub.qubits[:n], sub.qubits[n:])
     sub.h(sub.qubits)
+
     return sub#.to_gate(label=sub.name)
     
 
@@ -248,8 +255,6 @@ def apply_BMs(
     # 2) Add global measurement
     qc.measure(qubits, clbits)
 
-    # qc.save_statevector('post_meas', pershot=True)
-
 
 def get_qreg(circ: QuantumCircuit, name: str) -> QuantumRegister:
     return next(r for r in circ.qregs if r.name == name)
@@ -273,13 +278,14 @@ def apply_adaptive_part_U_NOHE_inversion(
     input_qubits: Sequence[Qubit],
     input_clbits: Sequence[Clbit],
     n: int,
-    save_svs = False
+    save_svs: bool = False
 ) -> None:
     """
     Adaptive SQPMs for NOHE inversion:
+      For each layer:
       • Choose A2 measurement bases (X vs Z) based on prior X-measurements (K2_clr).
-      • Do NOT apply Pauli corrections mid-circuit.
-      • After all measurements, apply one pass of conditional Zs on the relevant K2 qubits.
+      • Propagate corrections through C_NOHE (excl. meas) from that layer.
+      • Apply outcoming correction, then measure third wires to update their clbits
     """
     N = 2**n
     mapping = qc.metadata[f"C_NOHE_mapping[{N}]"]
@@ -406,70 +412,24 @@ def apply_inverse_swaps(
 
     for K in range(2, n):   # K = 2 .. n-1
         qc.swap(input_qubits[K], input_qubits[2**K - 1])
-
-    # for K in range(n - 1, 1, -1):  # descending
-    #     qc.swap(input_qubits[K], input_qubits[2**K - 1])
     
-
-def make_U_NOHE_inversion(
-    n: int
-) -> QuantumCircuit:
-    """
-    """
-
-    N = 2**n
-    total_qubits = N-1
-    sub = QuantumCircuit(total_qubits, name=f"U_NOHE[{N}]^-1")
-    sub = repackage_into_registers(sub, layout=[("K2", sub.qubits[:])])
-    K2 = sub.qubits
-
-    # C_NOHE on K2
-    A2, K2_clr, mapping, info, third_wires = rsp.apply_C_NOHE(sub, K2[:])
-
-    # Adaptive part
-    apply_adaptive_part_U_NOHE_inversion(sub, K2[:] + A2[:], K2_clr[:], n)
-    
-    # Apply SWAPs
-    apply_inverse_swaps(sub, input_qubits=K2)
-
-    return sub
-
 
 def apply_U_NOHE_inversion(
     qc: QuantumCircuit,
     input_qubits: Sequence[Qubit]
 ) -> None:
     """
+    Apply inversion to NOHE state held on input_qubits, which are in qc.
     """
     K2 = input_qubits
     N = len(K2) + 1
     n = int(math.log2(N))
-
-    # num_qubits_A2 = 2*(N-n-1)
-    # num_clbits_A2 = num_qubits_A2
-    # num_clbits_K2 = (N-1-n)
-
-    # K2 = input_qubits
-    # A2 = QuantumRegister(num_qubits_A2, "A2")
-    # K2_clr = ClassicalRegister(num_clbits_K2, "K2_clr")
-    # # A2_clr = ClassicalRegister(num_clbits_A2, "A2_clr")
-    # qc.add_register(A2, K2_clr)#, A2_clr)
-
-    # sub = make_U_NOHE_inversion(n)
-    # target_qubits = K2[:] + A2[:]
-    # target_clbits = K2_clr[:] #+ A2_clr[:]
-
-    # qc.compose(sub, qubits=target_qubits, clbits=target_clbits, inplace=True)
-
 
     A2, K2_clr, mapping, info, third_wires = rsp.apply_C_NOHE(qc, input_qubits=K2[:])
 
     apply_adaptive_part_U_NOHE_inversion(qc, K2[:] + A2[:], K2_clr[:], n)
 
     apply_inverse_swaps(qc, input_qubits=K2[:])
-
-
-    
 
 
 def counts_to_dm(counts, n):
@@ -480,7 +440,11 @@ def counts_to_dm(counts, n):
         probs[idx] = c/total
     return DensityMatrix(np.diag(probs).astype(complex))
 
-def plot_dm_heatmap(rho, which="abs", max_dim=512):
+def plot_dm_heatmap(
+        rho: DensityMatrix, 
+        which: str = "abs", 
+        max_dim: int = 512
+) -> None:
     A = rho.data
     d = A.shape[0]
     if A.shape[0] > max_dim:
@@ -511,14 +475,25 @@ def plot_dm_heatmap(rho, which="abs", max_dim=512):
     ax.grid(which='minor', linestyle='-', linewidth=0.3)
     ax.tick_params(which='minor', bottom=False, left=False)
 
-def reduced_dm(rho: DensityMatrix, keep_qubits):
+def reduced_dm(
+        rho: DensityMatrix, 
+        keep_qubits
+) -> DensityMatrix:
+    
     n = rho.num_qubits
     trace_out = [q for q in range(n) if q not in keep_qubits]
     return partial_trace(rho, trace_out)
     
 
-def simulate_circuit(qc, shots=10, method="statevector", print_mem=False):
-    """ """
+def simulate_circuit(
+        qc: QuantumCircuit, 
+        shots: int = 10, 
+        method: str = "statevector", 
+        print_mem: bool = False
+) -> Tuple[List[str], dict[int: str]]:
+    """
+    Simulate a circuit qc for shots using method. Choose to primt memory for all shots.  
+    """
     t0 = time.time()
     # simulate
     sim = AerSimulator(method=method)
@@ -538,3 +513,5 @@ def simulate_circuit(qc, shots=10, method="statevector", print_mem=False):
             print(m)
 
     return mem, counts
+
+

@@ -19,11 +19,12 @@ from qiskit.circuit.classical import expr
 from typing import Optional
 
 
-def initialize_adresses(n: int, 
-                        register_name: Optional[str] = 'addr_reg', 
-                        method: Optional[str] = 'Equal superposition', 
-                        seed: Optional[int] = None, 
-                        vec: Optional[np.ndarray] = None
+def initialize_adresses(
+        n: int, 
+        register_name: str = 'addr_reg', 
+        method: str = 'Equal superposition', 
+        seed: int = None, 
+        vec: np.ndarray = None
 ) -> QuantumCircuit:
     """
     Initializes address state
@@ -63,8 +64,8 @@ def initialize_adresses(n: int,
 
 
 def make_mem_bits(
-    n: int,
-    seed: Optional[int] = None
+        n: int,
+        seed: Optional[int] = None
 ) -> nd.array[int]:
     """
     Creates array of length N = n**2 of randomly determined (memory) bits
@@ -83,7 +84,7 @@ def make_mem_bits(
     
     
 def make_U_QRAM_gate(
-    mem_bits: np.ndarray[int]
+        mem_bits: np.ndarray[int]
 ) -> Gate:
     """
     Build a gate that implements U_QRAM for a memory of length N=2**n.
@@ -121,9 +122,9 @@ def make_U_QRAM_gate(
 
 
 def apply_U_QRAM(
-    qc: QuantumCircuit,
-    input_qubits: Sequence[Qubit],
-    mem_bits: np.ndarray[int]
+        qc: QuantumCircuit,
+        input_qubits: Sequence[Qubit],
+        mem_bits: np.ndarray[int]
 ) -> None:
     """
     Append U_QRAM(mem_bits) to `qc`, adding a 1-qubit 'bus' and repackaging
@@ -159,9 +160,9 @@ def apply_U_QRAM(
 
 
 def query_step_i(
-    qc: QuantumCircuit, 
-    n: int,
-    save_svs=False
+        qc: QuantumCircuit, 
+        n: int,
+        save_svs: bool = False
 ) -> None:
     """
     Applies step (i) of the QRAM query to qc, by performing BMs between QPU address 
@@ -190,11 +191,11 @@ def query_step_i(
 
 
 def query_step_ii(
-    qc: QuantumCircuit, 
-    L: QuantumRegister, 
-    I_clr: ClassicalRegister, 
-    mem_bits: Sequence[int],
-    save_svs = False
+        qc: QuantumCircuit, 
+        L: QuantumRegister, 
+        I_clr: ClassicalRegister, 
+        mem_bits: Sequence[int],
+        save_svs: bool = False
 ) -> None:
     """
     Applies step (ii) of the QRAM query to qc, i.e. data loading. Does so by applying 
@@ -242,63 +243,63 @@ def query_step_ii(
 
     if save_svs:
         qc.save_statevector(label="step ii done", pershot=True)
-
-
-def outcome_string_to_Pin_step_iii(outcome, n):
-    """ """
-    N = 2**n
-    num_qubits = 2*N-1 + 2*(2*N-n-2)
-
-    x = np.zeros(num_qubits, dtype=bool)
-    z = np.array([0]*(N-1) + outcome + [0]*2*(2*N-n-2), dtype=bool)
-    P_in = Pauli((z, x))
-
-    return P_in
-
-def precompute_step_iii_corrections(n):
-    """ """
-    N = 2**n
-    
-    all_outcomes = grl.all_binary_lists(N)
-
-    C = Clifford(rsp.make_C_NOHE_circuit(n+1 , measure=False)[0])  # note n+1 instead of n
-    d = {}
-
-    for outcome in all_outcomes:
-        P_in = outcome_string_to_Pin_step_iii(outcome, n)
-        P_out = P_in.evolve(C, frame="s")
-        d[grl.bits_to_int(outcome)] = P_out
-
-    return d
     
 
-def query_step_iii(qc, n, save_svs=False):
-    """ """
-    def outcome_string_to_Pin_step_iii(outcome, n):
-        """ """
+def query_step_iii(
+        qc: QuantumCircuit, 
+        n: int, 
+        save_svs: bool = False
+) -> None:
+    """ 
+    Applied step 3 of the query to qc, given n address qubits. Has the option to save intermediat
+    statevectors.
+    """
+    def outcome_string_to_Pin_step_iii(
+            outcome: list[int], 
+            n: int
+    ) -> Pauli:
+        """
+        Converts list of integers, representing outcomes from L measurement, to equivalent Pauli (P_in)
+        applied to the last N K2 qubits. 
+
+        n is the number of address qubits in the query.
+
+        Index i of the outcome array corresponds to the outcome of qubit i in L, which is equivalent to
+        a Pauli X on qubit N-1- + i of K2.
+
+        Note that the x, z arrays of a Pauli type object have big-endian ordering (LSB at index 0), while 
+        the string representation of a Pauli type object has little-endian ordering (LSB at last index)
+        """
         N = 2**n
         num_qubits = 2*N-1 + 2*(2*N-n-2)
-    
+
         x = np.zeros(num_qubits, dtype=bool)
         z = np.array([0]*(N-1) + outcome + [0]*2*(2*N-n-2), dtype=bool)
         P_in = Pauli((z, x))
-    
+
         return P_in
-    
-    def precompute_step_iii_corrections(n):
-        """ """
+
+    def precompute_step_iii_corrections(
+            n: int
+    ) -> dict[int, Pauli]:
+        """ 
+        Assumes n address qubits in the query. Precomputes the Pauli corrections on K2 and A2 (P_out)
+        corresponding to all possible L measurement outcomes.
+
+        Returns a dict where a key is a full L outcome (in base 10 form) and the values are the P_out's.
+        """
         N = 2**n
         
         all_outcomes = grl.all_binary_lists(N)
-    
+
         C = Clifford(rsp.make_C_NOHE_circuit(n+1 , measure=False)[0])  # note n+1 instead of n
         d = {}
-    
+
         for outcome in all_outcomes:
             P_in = outcome_string_to_Pin_step_iii(outcome, n)
             P_out = P_in.evolve(C, frame="s")
             d[grl.bits_to_int(outcome)] = P_out
-    
+
         return d
         
     N = 2**n
@@ -387,8 +388,20 @@ def query_step_iii(qc, n, save_svs=False):
         qc.save_statevector(label="h on bus done", pershot=True)
         
 
-def QRAM_query(qc_addr, qc_RS, n, mem_bits, save_svs=False, meas_output=False):
-    """ """
+def QRAM_query(
+        qc_addr: QuantumCircuit, 
+        qc_RS: QuantumCircuit, 
+        n: int, 
+        mem_bits: list[int], 
+        save_svs: bool = False, 
+        meas_output: bool = False
+) -> QuantumCircuit:
+    """ 
+    Returns a QuantumCircuit with the executed QRAM query given an address state QuantumCircuit
+    with n address qubits and a resource state QuantumCircuit, given memory bits.
+
+    Optional: save intermediate statevectors and / measure the output state.
+    """
     # combine address and resource states / circuits
     qc = qc_RS.tensor(qc_addr)
     qc.metadata = qc_RS.metadata | qc_addr.metadata
