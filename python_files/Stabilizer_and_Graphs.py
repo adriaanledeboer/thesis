@@ -4,9 +4,9 @@ from __future__ import annotations  # <-- must be here (and before other imports
 import qiskit, qiskit_aer#, qiskit_ibm_runtime, qiskit_ibm_catalog
 
 # Own packages|
-import Query as qry
-import RS_prep as rsp
-import General as grl
+from . import Query as qry
+from . import RS_prep as rsp
+from . import General as grl
 
 # Other packages
 import numpy as np 
