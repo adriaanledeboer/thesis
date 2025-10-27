@@ -416,7 +416,8 @@ def apply_inverse_swaps(
 
 def apply_U_NOHE_inversion(
     qc: QuantumCircuit,
-    input_qubits: Sequence[Qubit]
+    input_qubits: Sequence[Qubit],
+    save_svs: bool = False
 ) -> None:
     """
     Apply inversion to NOHE state held on input_qubits, which are in qc.
@@ -425,11 +426,20 @@ def apply_U_NOHE_inversion(
     N = len(K2) + 1
     n = int(math.log2(N))
 
-    A2, K2_clr, mapping, info, third_wires = rsp.apply_C_NOHE(qc, input_qubits=K2[:])
+    A2, K2_clr, mapping, info, third_wires = rsp.apply_C_NOHE(qc, input_qubits=K2[:], save_svs=save_svs)
 
-    apply_adaptive_part_U_NOHE_inversion(qc, K2[:] + A2[:], K2_clr[:], n)
+    if save_svs:
+        qc.save_statevector(label="apply C_NOHE done", pershot=True)
+
+    apply_adaptive_part_U_NOHE_inversion(qc, K2[:] + A2[:], K2_clr[:], n, save_svs=save_svs)
+
+    if save_svs:
+        qc.save_statevector(label="adaptive part done", pershot=True)
 
     apply_inverse_swaps(qc, input_qubits=K2[:])
+
+    if save_svs:
+        qc.save_statevector(label="inverse swaps done", pershot=True)
 
 
 def counts_to_dm(counts, n):

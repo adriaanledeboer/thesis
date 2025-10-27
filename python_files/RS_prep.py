@@ -115,7 +115,8 @@ def apply_U_NOHE(
 
 
 def make_Phi1(
-        n: int
+        n: int,
+        save_svs: bool = False
 ) -> QuantumCircuit:
     """
     Prepares the Phi1 part of the resource state, given the number of qubits in the address register: n.
@@ -134,10 +135,16 @@ def make_Phi1(
     
     # Make BPs
     grl.apply_make_BPs(qc, I[:] + K1[:]); qc.h(bus)
+
+    if save_svs:
+        qc.save_statevector(label=f"make BPs done", pershot=True)
     
     # Apply U_NOHE to the COMBINED (K1 + bus) inputs
     input_subset = K1[:] + bus[:]
     apply_U_NOHE(qc, input_subset)
+
+    if save_svs:
+        qc.save_statevector(label=f"apply U_NOHE done", pershot=True)
 
     N = 2**n
     I  = qc.qubits[:n]
@@ -176,7 +183,8 @@ def G(
 def make_C_NOHE_circuit(
         n: int,
         target_layer: int = None,
-        measure: bool = True
+        measure: bool = True,
+        save_svs: bool = False
 ) -> Tuple[QuantumCircuit, Dict[int, Tuple[int, int]], Dict[int, Dict[str, int]]]:
     """
     C_NOHE for N=2**n:
@@ -243,7 +251,8 @@ def make_C_NOHE_circuit(
                         info.setdefault(layer, {})  # <-- make sure dict exists
                         info[layer][gadget] = {"qubits": qubits, "ancillas": ancillas}
 
-                # sub.save_statevector(label=f"layer: {layer}, gadget: {gadget}, count: {count}", pershot=True)
+                if save_svs:
+                    sub.save_statevector(label=f"layer: {layer}, gadget: {gadget}, count: {count}", pershot=True)
 
                 if target_layer is None:
                     start_gates = True
@@ -280,7 +289,8 @@ def make_C_NOHE_circuit(
 def apply_C_NOHE(
         qc: QuantumCircuit,
         input_qubits: Sequence[Qubit],
-        measure = True
+        measure = True,
+        save_svs: bool = False
 ) -> Tuple[QuantumRegister, ClassicalRegister, Dict[int, Tuple[int,int]], Dict[int, Dict[str, int]], list[int]]:
     """
     Apply the deterministic C_NOHE to the given K2 wires (input_qubits).     
@@ -352,7 +362,8 @@ def apply_C_NOHE(
                         info.setdefault(layer, {})  # <-- make sure dict exists
                         info[layer][gadget] = {"qubits": qubits, "ancillas": ancillas}
 
-                # qc.save_statevector(label=f"layer: {layer}, gadget: {gadget}, count: {count}", pershot=True)
+                if save_svs:
+                    qc.save_statevector(label=f"layer: {layer}, gadget: {gadget}, count: {count}", pershot=True)
                 
                 count += 1
 
@@ -377,7 +388,8 @@ def apply_C_NOHE(
 
 
 def make_Phi2(
-        n: int
+        n: int,
+        save_svs: bool = False
 ) -> Tuple[QuantumCircuit, QuantumRegister, QuantumRegister, ClassicalRegister, Dict[int, Tuple[int,int]], Dict[int, Dict[str, int]], list[int]]:
     """
     Makes Phi 2 for a query with n input qubits.
@@ -388,7 +400,14 @@ def make_Phi2(
     qc = QuantumCircuit(Dprime, K2)
     
     grl.apply_make_BPs(qc, Dprime[:] + K2[:])
-    A2, K2_clr, mapping, info, third_wires = apply_C_NOHE(qc, input_qubits=K2[:])
+
+    if save_svs:
+        qc.save_statevector(label=f"make BPs done", pershot=True)
+
+    A2, K2_clr, mapping, info, third_wires = apply_C_NOHE(qc, input_qubits=K2[:], save_svs=save_svs)
+
+    if save_svs:
+        qc.save_statevector(label=f"apply C_NOHE done", pershot=True)
 
     return qc, K2, A2, K2_clr, mapping, info, third_wires
 
@@ -529,11 +548,11 @@ def make_phi_normal(
     Optionally save intermediate statevectors
     """
     
-    qc1 = make_Phi1(n)
+    qc1 = make_Phi1(n, save_svs=save_svs)
     if save_svs:
         qc1.save_statevector(label="phi1 done", pershot=True)
         
-    qc2, K2, A2, K2_clr, mapping, info, third_wires = make_Phi2(n)
+    qc2, K2, A2, K2_clr, mapping, info, third_wires = make_Phi2(n, save_svs=save_svs)
     if save_svs:
         qc2.save_statevector(label="phi2 done", pershot=True)
     
